@@ -276,6 +276,63 @@ input, textarea { font-family: inherit; }
 }
 
 /* ============================================
+   시연용 데모 버튼 — 미니멀, 발표/시연 시에만 사용
+   ============================================ */
+.demo-controls {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+.btn-demo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px dashed rgba(212, 182, 106, 0.18);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-body);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all 0.2s ease;
+}
+.btn-demo:hover {
+  opacity: 1;
+  color: var(--accent-gold);
+  border-color: rgba(212, 182, 106, 0.4);
+  border-style: solid;
+}
+
+/* 모바일 전용 — 오른쪽 상단 작은 점 */
+.btn-demo-mobile {
+  display: none;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 150;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(10, 8, 20, 0.6);
+  border: 1px dashed rgba(212, 182, 106, 0.25);
+  color: var(--text-muted);
+  display: none; /* 모바일 미디어쿼리에서만 활성 */
+  align-items: center;
+  justify-content: center;
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.btn-demo-mobile:active {
+  opacity: 1;
+  color: var(--accent-gold);
+}
+
+/* ============================================
    메인 영역
    ============================================ */
 .main {
@@ -3092,6 +3149,14 @@ input, textarea { font-family: inherit; }
     display: none;
   }
   
+  /* ----- 시연 데이터 버튼: 모바일은 플로팅 버튼만 표시 ----- */
+  .demo-controls {
+    display: none; /* 사이드바와 함께 숨김 */
+  }
+  .btn-demo-mobile {
+    display: flex !important; /* 모바일에서만 우상단 플로팅 */
+  }
+  
   /* ----- 발견 진입 버튼 ----- */
   .btn-discovery {
     padding: 16px 18px;
@@ -3223,6 +3288,18 @@ input, textarea { font-family: inherit; }
 
   <div class="mode-badge-wrap">
     <span id="mode-badge" class="mode-badge" style="display:none;"></span>
+  </div>
+  
+  <!-- 시연용 비밀 버튼 (미니멀, 발표/시연 시에만 사용) -->
+  <div class="demo-controls">
+    <button class="btn-demo" id="btn-demo-setup" title="시연 데이터 6개 행성 주입">
+      <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor">
+        <circle cx="3" cy="8" r="1.2"/>
+        <circle cx="8" cy="8" r="1.2"/>
+        <circle cx="13" cy="8" r="1.2"/>
+      </svg>
+      <span>시연 데이터</span>
+    </button>
   </div>
 </aside>
 
@@ -3820,6 +3897,15 @@ input, textarea { font-family: inherit; }
   </button>
 </nav>
 
+<!-- 모바일 전용 시연 데이터 버튼 (오른쪽 상단 미니멀) -->
+<button class="btn-demo-mobile" id="btn-demo-setup-mobile" title="시연 데이터 주입">
+  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+    <circle cx="3" cy="8" r="1.3"/>
+    <circle cx="8" cy="8" r="1.3"/>
+    <circle cx="13" cy="8" r="1.3"/>
+  </svg>
+</button>
+
 <!-- 토스트 -->
 <div class="toast" id="toast"></div>
 
@@ -4416,6 +4502,148 @@ function formatDateLong(ts) {
 }
 
 // ============================================
+// 시연용 데모 데이터 — 6일치 행성을 localStorage에 즉시 주입
+// 발표/시연 시 빈 은하가 아닌 풍성한 상태로 시작하기 위함
+// ============================================
+async function injectDemoData() {
+  // 확인 다이얼로그 — 기존 데이터가 있으면 덮어쓸 수 있으니
+  const existing = await Storage.getPlanets();
+  if (existing.length > 0) {
+    if (!confirm(`이미 ${existing.length}개의 행성이 있어요.\n시연용 데이터를 추가하시겠어요?\n(기존 행성은 유지됩니다)`)) {
+      return;
+    }
+  }
+  
+  // 시연용 6일치 데이터
+  // - 날짜: 오늘 기준으로 거꾸로 5일 전부터 (시연 시점에 따라 자동 조정)
+  //   요구사항의 5/15~5/20은 발표 시점 기준 최근으로 변환됨
+  // - 행성 이름, 감정, 메모는 명세 그대로
+  // - 가중치는 감정 순서에 따라 자연스러운 비율 부여
+  const today = new Date();
+  today.setHours(20, 30, 0, 0); // 저녁 시간대로 통일
+  
+  const dayOffset = (n) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - n);
+    // 약간의 시각 변화 (자연스럽게)
+    d.setHours(19 + (n % 4), 10 + (n * 7) % 50, 0, 0);
+    return d.getTime();
+  };
+  
+  const demoSet = [
+    {
+      daysAgo: 5,
+      emotions: ['overwhelmed', 'sadness'],
+      weights: [5, 3],
+      title: '백색소음',
+      memo: '사방이 꽉 막힌 듯 막막한 하루. 마음을 가라앉히기 위해 백색소음을 틀어두었다.'
+    },
+    {
+      daysAgo: 4,
+      emotions: ['grateful', 'fatigue'],
+      weights: [4, 4],
+      title: '그럼에도 불구하고',
+      memo: '몸은 천근만근 피로하지만, 곁에서 응원해 준 사람들 덕분에 감사함을 느낀 날.'
+    },
+    {
+      daysAgo: 3,
+      emotions: ['anxiety', 'overwhelmed', 'anger'],
+      weights: [5, 4, 3],
+      title: '모르겠어',
+      memo: '뜻대로 풀리지 않아 분노가 치밀고, 앞으로의 일이 불안하고 막막하다. 내 마음을 나도 잘 모르겠다.'
+    },
+    {
+      daysAgo: 2,
+      emotions: ['excited', 'tender', 'confident'],
+      weights: [5, 4, 3],
+      title: '나에게도 다정하게',
+      memo: '새로운 시작을 앞두고 무척 설렌다. 다른 사람뿐만 아니라 나 자신에게도 다정한 하루이기를.'
+    },
+    {
+      daysAgo: 1,
+      emotions: ['calm', 'sadness'],
+      weights: [5, 3],
+      title: '모닥불',
+      memo: '잔잔한 슬픔이 밀려왔지만, 타오르는 모닥불을 바라보듯 마음을 평온하게 다스려본다.'
+    },
+    {
+      daysAgo: 0,
+      emotions: ['fatigue', 'anxiety', 'confident'],
+      weights: [4, 3, 5],
+      title: '그럼에도',
+      memo: '피로와 불안이 엄습하는 일상이지만, 나는 결국 해낼 수 있다는 단단한 충만함을 채워간다.'
+    }
+  ];
+  
+  // 차례대로 Storage에 주입 (timestamp 오름차순으로 추가하여 정렬 자연스럽게)
+  // demoSet은 오래된 → 최신 순으로 처리
+  for (const item of demoSet) {
+    const planet = {
+      id: uid() + '-demo',
+      timestamp: dayOffset(item.daysAgo),
+      emotions: item.emotions,
+      emotionWeights: item.weights,
+      track: 'detailed',
+      memo: item.memo,
+      title: item.title
+    };
+    await Storage.addPlanet(planet);
+    // uid 충돌 방지를 위해 짧은 대기 (Date.now 기반이므로)
+    await new Promise(r => setTimeout(r, 5));
+  }
+  
+  // Core Star memorabilia 업데이트 (회복 신호 등 자연스럽게 활성화)
+  try {
+    const planets = await Storage.getPlanets();
+    await CoreStar.updateMemorabilia(planets);
+  } catch (e) { console.warn('memorabilia update failed', e); }
+  
+  toast('시연 데이터 6개의 행성이 은하에 자리잡았어요 ✦');
+  
+  // 즉각적 화면 갱신 — 현재 활성 뷰에 따라 적절한 함수 호출
+  const activeView = document.querySelector('.view.active')?.dataset.view || 'home';
+  if (activeView === 'home') await renderHome();
+  else if (activeView === 'planets') await renderPlanetsList();
+  else if (activeView === 'stats') await renderStatsPage();
+  else if (activeView === 'garden') await CoreStar.render();
+  // 어떤 뷰든 사이드바 통계는 갱신
+  try {
+    const planets = await Storage.getPlanets();
+    const statEl = document.getElementById('stat-planets');
+    if (statEl) statEl.textContent = planets.length;
+    const streakEl = document.getElementById('stat-streak');
+    if (streakEl) streakEl.textContent = calcStreak(planets);
+  } catch (e) { /* ignore */ }
+}
+
+// 데모 데이터 + 기존 데이터를 모두 지우는 헬퍼 (Q&A 후 정리용)
+async function resetAllData() {
+  if (!confirm('모든 행성과 편지 기록을 정말 지우시겠어요? 되돌릴 수 없어요.')) return;
+  try {
+    localStorage.removeItem('todak:planets');
+    localStorage.removeItem('todak:letters');
+    localStorage.removeItem('todak:memorabilia');
+  } catch (e) { /* ignore */ }
+  // window.storage도 시도
+  if (typeof window.storage !== 'undefined') {
+    try {
+      await window.storage.delete('todak:planets');
+      await window.storage.delete('todak:letters');
+      await window.storage.delete('todak:memorabilia');
+    } catch (e) { /* ignore */ }
+  }
+  // 메모리도 초기화
+  Storage._mem = { planets: [], letters: [], memorabilia: {} };
+  toast('모든 기록을 지웠어요');
+  
+  const activeView = document.querySelector('.view.active')?.dataset.view || 'home';
+  if (activeView === 'home') await renderHome();
+  else if (activeView === 'planets') await renderPlanetsList();
+  else if (activeView === 'stats') await renderStatsPage();
+  else if (activeView === 'garden') await CoreStar.render();
+}
+
+// ============================================
 // 행성 이름 유틸 — 추천 placeholder + fallback 이름
 // ============================================
 // 감정 키 + 가중치 기반으로 시적 placeholder 생성
@@ -4532,6 +4760,23 @@ document.querySelectorAll('.mobile-tab[data-view]').forEach(btn => {
     const view = btn.dataset.view;
     showView(view);
   });
+});
+
+// 시연 데이터 버튼 (데스크톱 사이드바 + 모바일 플로팅)
+['btn-demo-setup', 'btn-demo-setup-mobile'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', injectDemoData);
+});
+
+// 시연 버튼을 더블탭/우클릭하면 데이터 리셋 (Q&A 후 정리용 비밀 기능)
+['btn-demo-setup', 'btn-demo-setup-mobile'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      resetAllData();
+    });
+  }
 });
 
 // ============================================

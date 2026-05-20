@@ -4283,27 +4283,67 @@ const Storage = {
   KEY_LETTERS: 'todak:letters',
   KEY_MEMORABILIA: 'todak:memorabilia',
   
-  // 메모리 폴백 (storage API 실패 시)
+  // 메모리 캐시
   _mem: { planets: [], letters: [], memorabilia: {} },
   _ready: false,
   
+  // 영속 저장소 선택: window.storage 우선 시도, 실패 시 localStorage 사용
+  // 일반 브라우저(GitHub Pages 등)에서는 자동으로 localStorage로 폴백됨
+  _useWindowStorage: false,
+  
+  async _read(key) {
+    // 1) window.storage (Claude artifact 환경에서 작동)
+    if (typeof window.storage !== 'undefined') {
+      try {
+        const r = await window.storage.get(key);
+        this._useWindowStorage = true;
+        return r ? r.value : null;
+      } catch (e) { /* fallthrough */ }
+    }
+    // 2) localStorage (일반 브라우저, GitHub Pages 등)
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn('localStorage read failed', e);
+      return null;
+    }
+  },
+  
+  async _write(key, value) {
+    // window.storage가 작동했다면 그쪽에도 저장
+    if (this._useWindowStorage && typeof window.storage !== 'undefined') {
+      try {
+        await window.storage.set(key, value);
+      } catch (e) { /* fallthrough — localStorage에도 저장 */ }
+    }
+    // localStorage에도 항상 저장 (백업 + GitHub Pages 환경 지원)
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn('localStorage write failed', e);
+    }
+  },
+  
   async init() {
     try {
-      const p = await window.storage.get(this.KEY_PLANETS);
-      this._mem.planets = p ? JSON.parse(p.value) : [];
+      const p = await this._read(this.KEY_PLANETS);
+      this._mem.planets = p ? JSON.parse(p) : [];
     } catch (e) {
+      console.warn('planets parse failed', e);
       this._mem.planets = [];
     }
     try {
-      const l = await window.storage.get(this.KEY_LETTERS);
-      this._mem.letters = l ? JSON.parse(l.value) : [];
+      const l = await this._read(this.KEY_LETTERS);
+      this._mem.letters = l ? JSON.parse(l) : [];
     } catch (e) {
+      console.warn('letters parse failed', e);
       this._mem.letters = [];
     }
     try {
-      const m = await window.storage.get(this.KEY_MEMORABILIA);
-      this._mem.memorabilia = m ? JSON.parse(m.value) : {};
+      const m = await this._read(this.KEY_MEMORABILIA);
+      this._mem.memorabilia = m ? JSON.parse(m) : {};
     } catch (e) {
+      console.warn('memorabilia parse failed', e);
       this._mem.memorabilia = {};
     }
     this._ready = true;
@@ -4315,31 +4355,24 @@ const Storage = {
   
   async addPlanet(planet) {
     this._mem.planets.push(planet);
-    try {
-      await window.storage.set(this.KEY_PLANETS, JSON.stringify(this._mem.planets));
-    } catch (e) { console.warn('storage save failed', e); }
+    await this._write(this.KEY_PLANETS, JSON.stringify(this._mem.planets));
   },
   
   async deletePlanet(id) {
     this._mem.planets = this._mem.planets.filter(p => p.id !== id);
-    try {
-      await window.storage.set(this.KEY_PLANETS, JSON.stringify(this._mem.planets));
-    } catch (e) { console.warn('storage save failed', e); }
+    await this._write(this.KEY_PLANETS, JSON.stringify(this._mem.planets));
   },
   
   // 특정 행성의 필드를 부분 업데이트 (title 외에도 향후 확장 가능)
-  // 기존 데이터 구조는 그대로 두고 명시된 필드만 덮어씀.
   async updatePlanet(id, updatedFields) {
     const i = this._mem.planets.findIndex(p => p.id === id);
     if (i < 0) return false;
     this._mem.planets[i] = { ...this._mem.planets[i], ...updatedFields };
-    try {
-      await window.storage.set(this.KEY_PLANETS, JSON.stringify(this._mem.planets));
-    } catch (e) { console.warn('storage save failed', e); }
+    await this._write(this.KEY_PLANETS, JSON.stringify(this._mem.planets));
     return true;
   },
   
-  // 이름만 업데이트하는 간단한 헬퍼 (요구사항 명세)
+  // 이름만 업데이트하는 간단한 헬퍼
   async updatePlanetName(id, newName) {
     const clean = (newName || '').trim();
     return this.updatePlanet(id, { title: clean });
@@ -4351,9 +4384,7 @@ const Storage = {
   
   async addLetter(letter) {
     this._mem.letters.push(letter);
-    try {
-      await window.storage.set(this.KEY_LETTERS, JSON.stringify(this._mem.letters));
-    } catch (e) { console.warn('storage save failed', e); }
+    await this._write(this.KEY_LETTERS, JSON.stringify(this._mem.letters));
   },
   
   async getMemorabilia() {
@@ -4362,9 +4393,7 @@ const Storage = {
   
   async setMemorabilia(obj) {
     this._mem.memorabilia = { ...this._mem.memorabilia, ...obj };
-    try {
-      await window.storage.set(this.KEY_MEMORABILIA, JSON.stringify(this._mem.memorabilia));
-    } catch (e) { console.warn('storage save failed', e); }
+    await this._write(this.KEY_MEMORABILIA, JSON.stringify(this._mem.memorabilia));
   }
 };
 
